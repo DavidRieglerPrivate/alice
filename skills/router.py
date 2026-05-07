@@ -1,6 +1,7 @@
 import re
 
 from skills._base import SkillResult
+from skills.calculator import handle_calculate
 from skills.file_ops import handle_open_file, handle_search_file
 from skills.launch_app import handle_close, handle_launch
 from skills.memory_ops import handle_wipe_memory
@@ -36,6 +37,36 @@ _WIPE_MEMORY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# "calculate 5 + 3" / "compute 10 times 4" / "work out 2 to the power of 8"
+_CALC_CMD_RE = re.compile(
+    r'^(?:calculate|calc|compute|solve|evaluate|eval|work\s+out|figure\s+out|determine)\s+(.+)',
+    re.IGNORECASE,
+)
+
+# "what is 5 + 3?" / "what's 10 times 4" / "how much is 100 divided by 4"
+# Only routes when the expression starts with a number or sqrt — avoids hijacking
+# general "what is X" questions that don't look like math.
+_CALC_QUERY_RE = re.compile(
+    r'^(?:'
+    r"what(?:'s|\s+is|\s+would\s+be)\s+(?:the\s+)?(?:result\s+of\s+|answer\s+(?:to|for)\s+|value\s+of\s+)?"
+    r'|how\s+(?:much|many)\s+(?:is|are)\s+'
+    r'|what\s+does\s+'
+    r')'
+    r'((?:-?\d|sqrt(?:\s+of)?\s|square\s+root\s+of\s).+?)(?:\s*\?)?$',
+    re.IGNORECASE,
+)
+
+# Bare math expressions: "5 + 3", "5 plus 3 times 2", "sqrt of 9", "5 squared"
+_CALC_BARE_RE = re.compile(
+    r'^(?:'
+    r'-?\d+(?:\.\d+)?\s*(?:[+\-*/^%]|\*\*)\s*-?\d'
+    r'|-?\d+(?:\.\d+)?\s+(?:plus|minus|times|multiplied\s+by|divided\s+by|over|mod(?:ulo)?'
+        r'|to\s+the|raised\s+to|squ?ared?|cubed?)'
+    r'|(?:square\s+root\s+of|sqrt(?:\s+of)?)\s+-?\d'
+    r')',
+    re.IGNORECASE,
+)
+
 
 def route(command: str) -> SkillResult | None:
     """Return a SkillResult if a skill handled the command, or None to fall through to the LLM."""
@@ -51,4 +82,10 @@ def route(command: str) -> SkillResult | None:
         return handle_launch(m.group(1))
     if m := _CLOSE_RE.match(cmd):
         return handle_close(m.group(1))
+    if m := _CALC_CMD_RE.match(cmd):
+        return handle_calculate(m.group(1))
+    if m := _CALC_QUERY_RE.match(cmd):
+        return handle_calculate(m.group(1))
+    if _CALC_BARE_RE.match(cmd):
+        return handle_calculate(cmd)
     return None
