@@ -42,6 +42,8 @@ KNOWN_APPS: dict[str, str] = {
     "zoom":                   "Zoom.exe",
     "obs":                    "obs64.exe",
     "vlc":                    "vlc.exe",
+    "zen":                    "zen.exe",
+    "zen browser":            "zen.exe",
 }
 
 # App name → process image name used by taskkill (when different from KNOWN_APPS)
@@ -92,16 +94,24 @@ def handle_launch(app_name: str) -> SkillResult:
 def handle_close(app_name: str) -> SkillResult:
     key = app_name.lower().strip(" .,")
     proc = _CLOSE_PROC.get(key) or KNOWN_APPS.get(key)
-    if not proc:
-        # Guess: strip spaces and append .exe
-        proc = key.replace(" ", "") + ".exe"
+
+    candidates: list[str]
+    if proc:
+        candidates = [proc]
+    else:
+        # Try first-word.exe first (e.g. "zen browser" → "zen.exe"),
+        # then the joined form (e.g. "zenbrowser.exe") as a last resort.
+        first_word = key.split()[0]
+        candidates = [first_word + ".exe", key.replace(" ", "") + ".exe"]
+
     try:
-        result = subprocess.run(
-            ["taskkill", "/IM", proc, "/F"],
-            capture_output=True, text=True,
-        )
-        if result.returncode == 0:
-            return SkillResult(response=random.choice(_CLOSE_REPLIES), success=True)
+        for candidate in candidates:
+            result = subprocess.run(
+                ["taskkill", "/IM", candidate, "/F"],
+                capture_output=True, text=True,
+            )
+            if result.returncode == 0:
+                return SkillResult(response=random.choice(_CLOSE_REPLIES), success=True)
         return SkillResult(response=_FAIL_CLOSE, success=False)
     except Exception:
         return SkillResult(response=_FAIL_CLOSE, success=False)

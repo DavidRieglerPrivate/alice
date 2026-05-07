@@ -3,6 +3,7 @@
 import sys
 
 from core.llm import stream_response, MODELS, ensure_ollama_running, load_model
+from core.memory import load_recent_exchanges, save_exchange, start_session
 from core.tts import speak, warmup
 from skills import route
 
@@ -37,13 +38,18 @@ def choose_input_mode() -> str:
         print("Please enter v or t.")
 
 
-def _handle_command(command: str, history: list[dict], model: str) -> str:
-    """Route to a skill or fall back to the LLM. Returns the full response text."""
+def _handle_command(command: str, history: list[dict], model: str) -> tuple[str, bool]:
+    """Route to a skill or fall back to the LLM.
+
+    Returns (response_text, memory_wiped).
+    """
     result = route(command)
     if result is not None:
         print(f"Alice: {result.response}\n")
         speak(result.response)
-        return result.response
+        save_exchange(command, result.response)
+        memory_wiped = command.lower().startswith(("wipe", "clear", "reset", "forget", "erase", "delete"))
+        return result.response, memory_wiped
 
     print("Alice:", end=" ", flush=True)
     full = ""
@@ -52,11 +58,14 @@ def _handle_command(command: str, history: list[dict], model: str) -> str:
         speak(sentence)
         full += sentence + " "
     print("\n")
-    return full.strip()
+    response = full.strip()
+    save_exchange(command, response)
+    return response, False
 
 
 def run_text_loop(model: str) -> None:
-    history: list[dict] = []
+    history = load_recent_exchanges(10)
+    start_session()
     print('\nType your message and press Enter. Type "exit" or press Ctrl+C to quit.\n')
     try:
         while True:
@@ -67,9 +76,13 @@ def run_text_loop(model: str) -> None:
                 print("Goodbye.")
                 break
 
-            full = _handle_command(command, history, model)
-            history.append({"role": "user",      "content": command})
-            history.append({"role": "assistant",  "content": full})
+            full, memory_wiped = _handle_command(command, history, model)
+            if memory_wiped:
+                history = load_recent_exchanges(10)
+                start_session()
+            else:
+                history.append({"role": "user",      "content": command})
+                history.append({"role": "assistant",  "content": full})
     except KeyboardInterrupt:
         print("\nGoodbye.")
 
@@ -102,7 +115,8 @@ def run_voice_loop(model: str) -> None:
     )
     stream.start()
 
-    history: list[dict] = []
+    history = load_recent_exchanges(10)
+    start_session()
     print(f'Listening for wake word "Alice"… (Ctrl+C to quit)\n')
 
     try:
@@ -141,9 +155,13 @@ def run_voice_loop(model: str) -> None:
                 continue
 
             print(f"You:   {command}")
-            full = _handle_command(command, history, model)
-            history.append({"role": "user",      "content": command})
-            history.append({"role": "assistant",  "content": full})
+            full, memory_wiped = _handle_command(command, history, model)
+            if memory_wiped:
+                history = load_recent_exchanges(10)
+                start_session()
+            else:
+                history.append({"role": "user",      "content": command})
+                history.append({"role": "assistant",  "content": full})
 
     except KeyboardInterrupt:
         print("\nGoodbye.")

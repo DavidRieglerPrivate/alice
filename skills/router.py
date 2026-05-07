@@ -3,6 +3,7 @@ import re
 from skills._base import SkillResult
 from skills.file_ops import handle_open_file, handle_search_file
 from skills.launch_app import handle_close, handle_launch
+from skills.memory_ops import handle_wipe_memory
 
 _FILE_EXTS = (
     r'txt|py|ts|js|jsx|tsx|json|md|pdf|doc|docx|xls|xlsx|csv|html|htm|css|xml'
@@ -30,11 +31,18 @@ _OPEN_FILE_RE = re.compile(
 _OPEN_RE  = re.compile(r'^(?:open|launch|start|run)\s+(.+)', re.IGNORECASE)
 _CLOSE_RE = re.compile(r'^(?:close|quit|exit|kill|stop|shut\s+down)\s+(.+)', re.IGNORECASE)
 
+_WIPE_MEMORY_RE = re.compile(
+    r'^(?:wipe|clear|reset|forget|erase|delete)\s+(?:your\s+)?(?:memory|conversation|history|chat)',
+    re.IGNORECASE,
+)
+
 
 def route(command: str) -> SkillResult | None:
     """Return a SkillResult if a skill handled the command, or None to fall through to the LLM."""
     cmd = command.strip()
 
+    if _WIPE_MEMORY_RE.match(cmd):
+        return handle_wipe_memory()
     if m := _SEARCH_FILE_RE.match(cmd):
         return handle_search_file(m.group(1) or m.group(2))
     if m := _OPEN_FILE_RE.match(cmd):
