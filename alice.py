@@ -2,7 +2,7 @@
 
 import sys
 
-from core.llm import stream_response, MODELS
+from core.llm import stream_response, MODELS, ensure_ollama_running, load_model
 from core.tts import speak, warmup
 from skills import route
 
@@ -153,10 +153,13 @@ def run_voice_loop(model: str) -> None:
 
 
 def main():
+    ensure_ollama_running()
+
     model = choose_model()
     mode  = choose_input_mode()
 
     print(f"\nStarting Alice with model '{model}' in {'voice' if mode == 'v' else 'text'} mode.")
+    load_model(model)
     print("Warming up voice…")
     warmup()
 

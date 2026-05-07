@@ -1,8 +1,12 @@
 import re
+import sys
 import json
+import time
+import subprocess
 import requests
 
-OLLAMA_URL = "http://localhost:11434/api/chat"
+OLLAMA_BASE = "http://localhost:11434"
+OLLAMA_URL  = f"{OLLAMA_BASE}/api/chat"
 
 MODELS = {
     "qwen3:14b": "qwen3:14b (recommended for 32 GB RAM / 8 GB VRAM)",
@@ -23,6 +27,47 @@ Follow these rules strictly:
 _SENT_END   = re.compile(r'(?<=[.!?])\s+')
 _THINK_DONE = re.compile(r'<think>.*?</think>', re.DOTALL)
 _THINK_OPEN = re.compile(r'<think>.*$',         re.DOTALL)
+
+
+def _ollama_ready() -> bool:
+    try:
+        requests.get(OLLAMA_BASE, timeout=2)
+        return True
+    except requests.exceptions.RequestException:
+        return False
+
+
+def ensure_ollama_running() -> None:
+    if _ollama_ready():
+        return
+    print("Ollama is not running — starting it…")
+    kwargs: dict = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    try:
+        subprocess.Popen(["ollama", "serve"], **kwargs)
+    except FileNotFoundError:
+        print("Error: 'ollama' not found in PATH. Please start Ollama manually.")
+        return
+    for _ in range(30):
+        time.sleep(0.5)
+        if _ollama_ready():
+            print("Ollama is ready.")
+            return
+    print("Warning: Ollama may not have started in time.")
+
+
+def load_model(model: str) -> None:
+    print(f"Loading model '{model}'…")
+    try:
+        requests.post(
+            f"{OLLAMA_BASE}/api/generate",
+            json={"model": model, "prompt": "", "keep_alive": "10m"},
+            timeout=180,
+        )
+        print(f"Model '{model}' is ready.")
+    except requests.exceptions.RequestException as exc:
+        print(f"Warning: could not pre-load model: {exc}")
 
 
 def flush_sentences(buf: str) -> tuple[list[str], str]:
