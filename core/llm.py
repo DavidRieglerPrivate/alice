@@ -9,8 +9,8 @@ OLLAMA_BASE = "http://localhost:11434"
 OLLAMA_URL  = f"{OLLAMA_BASE}/api/chat"
 
 MODELS = {
-    "qwen3:14b": "qwen3:14b (recommended for 32 GB RAM / 8 GB VRAM)",
-    "llama3.2":  "llama3.2  (recommended for 16 GB RAM / 4 GB VRAM)",
+    "qwen3:14b": "qwen3:14b (recommended for 16 GB RAM / 10 GB VRAM)",
+    "llama3.2":  "llama3.2  (recommended for 8 GB RAM  / 4 GB VRAM)",
 }
 
 SYSTEM_PROMPT = """\
