@@ -3,7 +3,11 @@ import json
 import requests
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
-LLM_MODEL  = "qwen3:14b"
+
+MODELS = {
+    "qwen3:14b": "qwen3:14b (recommended for 32 GB RAM / 8 GB VRAM)",
+    "llama3.2":  "llama3.2  (recommended for 16 GB RAM / 4 GB VRAM)",
+}
 
 SYSTEM_PROMPT = """\
 You are Alice, a sharp and friendly voice assistant.
@@ -28,13 +32,13 @@ def flush_sentences(buf: str) -> tuple[list[str], str]:
 
 
 def strip_thinking(text: str) -> str:
-    """Remove qwen3 <think>…</think> reasoning traces (complete or partial)."""
+    # """Remove qwen3 <think>…</think> reasoning traces (complete or partial)."""
     text = _THINK_DONE.sub('', text)
     text = _THINK_OPEN.sub('', text)
     return text
 
 
-def stream_response(user_text: str, history: list[dict]):
+def stream_response(user_text: str, history: list[dict], model: str = "llama3.2"):
     """Yield one complete sentence at a time as the LLM generates output."""
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -45,7 +49,7 @@ def stream_response(user_text: str, history: list[dict]):
         resp = requests.post(
             OLLAMA_URL,
             json={
-                "model":    LLM_MODEL,
+                "model":    model,
                 "messages": messages,
                 "stream":   True,
                 "think":    False,

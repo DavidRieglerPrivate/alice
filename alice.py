@@ -1,26 +1,89 @@
 #!/usr/bin/env python3
 
 import sys
-import queue
-import whisper
-import sounddevice as sd
 
-from core.audio import collect_utterance, transcribe, SAMPLE_RATE, CHUNK_SIZE
-from core.llm import stream_response
+from core.llm import stream_response, MODELS
 from core.tts import speak, warmup
+from skills import route
+
 
 WAKE_WORD          = "alice"
 WAKE_MODEL_SIZE    = "base"
 COMMAND_MODEL_SIZE = "small"
 
 
-def main():
-    print(f"Loading Whisper '{WAKE_MODEL_SIZE}' (wake word)…")
+def choose_model() -> str:
+    print("\nChoose a model:")
+    keys = list(MODELS.keys())
+    for i, key in enumerate(keys, 1):
+        print(f"  {i}) {MODELS[key]}")
+    while True:
+        choice = input("Enter 1 or 2: ").strip()
+        if choice == "1":
+            return keys[0]
+        if choice == "2":
+            return keys[1]
+        print("Please enter 1 or 2.")
+
+
+def choose_input_mode() -> str:
+    print("\nChoose input mode:")
+    print("  v) Voice  — speak to Alice using the wake word")
+    print("  t) Text   — type commands in the console")
+    while True:
+        choice = input("Enter v or t: ").strip().lower()
+        if choice in ("v", "t"):
+            return choice
+        print("Please enter v or t.")
+
+
+def _handle_command(command: str, history: list[dict], model: str) -> str:
+    """Route to a skill or fall back to the LLM. Returns the full response text."""
+    result = route(command)
+    if result is not None:
+        print(f"Alice: {result.response}\n")
+        speak(result.response)
+        return result.response
+
+    print("Alice:", end=" ", flush=True)
+    full = ""
+    for sentence in stream_response(command, history, model):
+        print(sentence, end=" ", flush=True)
+        speak(sentence)
+        full += sentence + " "
+    print("\n")
+    return full.strip()
+
+
+def run_text_loop(model: str) -> None:
+    history: list[dict] = []
+    print('\nType your message and press Enter. Type "exit" or press Ctrl+C to quit.\n')
+    try:
+        while True:
+            command = input("You: ").strip()
+            if not command:
+                continue
+            if command.lower() in ("exit", "quit"):
+                print("Goodbye.")
+                break
+
+            full = _handle_command(command, history, model)
+            history.append({"role": "user",      "content": command})
+            history.append({"role": "assistant",  "content": full})
+    except KeyboardInterrupt:
+        print("\nGoodbye.")
+
+
+def run_voice_loop(model: str) -> None:
+    import queue
+    import whisper
+    import sounddevice as sd
+    from core.audio import collect_utterance, transcribe, SAMPLE_RATE, CHUNK_SIZE
+
+    print(f"\nLoading Whisper '{WAKE_MODEL_SIZE}' (wake word)…")
     wake_model = whisper.load_model(WAKE_MODEL_SIZE)
     print(f"Loading Whisper '{COMMAND_MODEL_SIZE}' (commands)…")
     command_model = whisper.load_model(COMMAND_MODEL_SIZE)
-    print("Warming up voice…")
-    warmup()
     print("Ready.\n")
 
     audio_q: queue.Queue = queue.Queue()
@@ -44,7 +107,6 @@ def main():
 
     try:
         while True:
-            # Wait for an utterance containing the wake word
             audio = collect_utterance(audio_q)
             if audio is None:
                 continue
@@ -57,8 +119,6 @@ def main():
             print("[Wake word detected]")
             speak("Yes?")
 
-            # Get the command: re-transcribe with the more accurate model if
-            # the command was in the same utterance, or collect a new utterance
             suffix = wake_text[wake_idx + len(WAKE_WORD):].strip(" ,.-")
 
             if suffix:
@@ -81,23 +141,29 @@ def main():
                 continue
 
             print(f"You:   {command}")
-            print("Alice:", end=" ", flush=True)
-
-            full = ""
-            for sentence in stream_response(command, history):
-                print(sentence, end=" ", flush=True)
-                speak(sentence)
-                full += sentence + " "
-            print("\n")
-
+            full = _handle_command(command, history, model)
             history.append({"role": "user",      "content": command})
-            history.append({"role": "assistant",  "content": full.strip()})
+            history.append({"role": "assistant",  "content": full})
 
     except KeyboardInterrupt:
         print("\nGoodbye.")
     finally:
         stream.stop()
         stream.close()
+
+
+def main():
+    model = choose_model()
+    mode  = choose_input_mode()
+
+    print(f"\nStarting Alice with model '{model}' in {'voice' if mode == 'v' else 'text'} mode.")
+    print("Warming up voice…")
+    warmup()
+
+    if mode == "t":
+        run_text_loop(model)
+    else:
+        run_voice_loop(model)
 
 
 if __name__ == "__main__":
