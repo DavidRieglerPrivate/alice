@@ -75,16 +75,15 @@ def handle_launch(app_name: str) -> SkillResult:
     key = app_name.lower().strip(" .,")
     exe = KNOWN_APPS.get(key)
     try:
-        # Start Menu covers user-installed apps (Discord, Steam, Epic…) — try it first.
+        # Start Menu covers user-installed apps.
         lnk = _find_in_start_menu(key)
         if lnk:
             os.startfile(lnk)
         elif exe:
-            # System apps (notepad, calc, explorer…) live in PATH — run directly.
+            # System apps (notepad, calculator, explorer…) live in PATH — run directly.
             subprocess.Popen([exe], shell=True)
         else:
-            # Last resort: let the Windows shell resolve the name.
-            subprocess.Popen(["cmd", "/c", "start", "", app_name], shell=False)
+            return SkillResult(response=_FAIL_OPEN, success=False)
         return SkillResult(response=random.choice(_OPEN_REPLIES), success=True)
     except Exception:
         return SkillResult(response=_FAIL_OPEN, success=False)
