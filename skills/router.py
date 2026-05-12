@@ -29,8 +29,8 @@ _OPEN_FILE_RE = re.compile(
     re.IGNORECASE,
 )
 
-_OPEN_RE  = re.compile(r'^(?:open|launch|start|run)\s+(.+)', re.IGNORECASE)
-_CLOSE_RE = re.compile(r'^(?:close|quit|exit|kill|stop|shut\s+down)\s+(.+)', re.IGNORECASE)
+_OPEN_RE  = re.compile(r'^(?:open|launch|start|run)\s+(?:the\s+|a\s+|an\s+)?(.+)', re.IGNORECASE)
+_CLOSE_RE = re.compile(r'^(?:close|quit|exit|kill|stop|shut\s+down)\s+(?:the\s+|a\s+|an\s+)?(.+)', re.IGNORECASE)
 
 _WIPE_MEMORY_RE = re.compile(
     r'^(?:wipe|clear|reset|forget|erase|delete)\s+(?:your\s+)?(?:memory|conversation|history|chat)',

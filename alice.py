@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import re
 import sys
 
 from core.llm import stream_response, MODELS, ensure_ollama_running, load_model
@@ -11,6 +12,13 @@ from skills import route
 WAKE_WORD          = "alice"
 WAKE_MODEL_SIZE    = "base"
 COMMAND_MODEL_SIZE = "small"
+
+# Phrases that end a voice conversation session and return to wake-word listening.
+_QUIT_RE = re.compile(
+    r"^(?:stop|quit|goodbye|bye(?:\s*bye)?|that'?s\s+all|go\s+to\s+sleep|"
+    r"end|done|exit|farewell|see\s+you(?:\s+later)?|i'?m\s+done|no\s+more)\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
 
 
 def choose_model() -> str:
@@ -120,7 +128,7 @@ def run_voice_loop(model: str) -> None:
     print(f'Listening for wake word "Alice"… (Ctrl+C to quit)\n')
 
     try:
-        while True:
+        while True:  # outer loop: idle, waiting for wake word
             audio = collect_utterance(audio_q)
             if audio is None:
                 continue
@@ -143,7 +151,7 @@ def run_voice_loop(model: str) -> None:
                     if cmd_idx != -1 else suffix
                 )
             else:
-                print("Listening for your instruction…")
+                print('Listening… (say "stop" or "goodbye" to end)\n')
                 audio = collect_utterance(audio_q)
                 if audio is None:
                     print("No instruction heard.\n")
@@ -154,14 +162,32 @@ def run_voice_loop(model: str) -> None:
                 print("(nothing transcribed)\n")
                 continue
 
-            print(f"You:   {command}")
-            full, memory_wiped = _handle_command(command, history, model)
-            if memory_wiped:
-                history = load_recent_exchanges(10)
-                start_session()
-            else:
-                history.append({"role": "user",      "content": command})
-                history.append({"role": "assistant",  "content": full})
+            # inner loop: active conversation — no wake word needed
+            while True:
+                print(f"You:   {command}")
+
+                if _QUIT_RE.match(command.strip()):
+                    speak("Goodbye.")
+                    print('Conversation ended. Listening for "Alice"…\n')
+                    break
+
+                full, memory_wiped = _handle_command(command, history, model)
+                if memory_wiped:
+                    history = load_recent_exchanges(10)
+                    start_session()
+                else:
+                    history.append({"role": "user",      "content": command})
+                    history.append({"role": "assistant",  "content": full})
+
+                print('Listening… (say "stop" or "goodbye" to end)\n')
+                audio = collect_utterance(audio_q)
+                if audio is None:
+                    print("(nothing heard, still listening)\n")
+                    continue
+                command = transcribe(audio, command_model)
+                if not command:
+                    print("(nothing transcribed)\n")
+                    continue
 
     except KeyboardInterrupt:
         print("\nGoodbye.")
